@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>M/M/N Queue Simulator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f9;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 20px auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    form label {
+      font-weight: bold;
+    }
+
+    form input, form button {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    form button {
+      background: #007BFF;
+      color: white;
+      cursor: pointer;
+    }
+
+    form button:hover {
+      background: #0056b3;
+    }
+
+    #results {
+      margin-top: 20px;
+    }
+
+    #ganttChart {
+      margin: 20px 0;
+      border: 1px solid #ccc;
+    }
+
+    #resultsTable {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    #resultsTable th, #resultsTable td {
+      padding: 10px;
+      border: 1px solid #ccc;
+      text-align: center;
+    }
+
+    #resultsTable th {
+      background: #007BFF;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>M/M/N Queue Simulator</h1>
+    <form id="simulatorForm">
+      <label for="meanArrivalRate">Mean Arrival Rate (λ):</label>
+      <input type="number" id="meanArrivalRate" step="0.01" required>
+      
+      <label for="meanServiceRate">Mean Service Rate (μ):</label>
+      <input type="number" id="meanServiceRate" step="0.01" required>
+      
+      <label for="numServers">Number of Servers (N):</label>
+      <input type="number" id="numServers" min="1" required>
+      
+      <button type="submit">Simulate</button>
+    </form>
+    
+    <div id="results">
+      <h2>Simulation Results</h2>
+      <canvas id="ganttChart" width="800" height="200"></canvas>
+      <table id="resultsTable">
+        <thead>
+          <tr>
+            <th>Priority</th>
+            <th>Start Time</th>
+            <th>End Time</th>
+            <th>Waiting Time</th>
+            <th>Service Completion Time</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    document.getElementById('simulatorForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      
+      const lambda = parseFloat(document.getElementById('meanArrivalRate').value);
+      const mu = parseFloat(document.getElementById('meanServiceRate').value);
+      const numServers = parseInt(document.getElementById('numServers').value);
+      
+      const numCustomers = 10; // Fixed number of customers for simulation
+      const randomNumbers = generateRandomNumbers(numCustomers);
+      
+      const interArrivalTimes = randomNumbers.map(r => -Math.log(r) / lambda);
+      const serviceTimes = randomNumbers.map(r => -Math.log(r) / mu);
+      
+      const results = calculateQueueMetrics(interArrivalTimes, serviceTimes, numServers);
+      drawGanttChart(results);
+      populateResultsTable(results);
+    });
+
+    function generateRandomNumbers(count) {
+      const a = 1103515245;
+      const c = 12345;
+      const m = Math.pow(2, 31);
+      let seed = Date.now();
+      
+      const randomNumbers = [];
+      for (let i = 0; i < count; i++) {
+        seed = (a * seed + c) % m;
+        randomNumbers.push(seed / m);
+      }
+      return randomNumbers;
+    }
+
+    function calculateQueueMetrics(interArrivalTimes, serviceTimes, numServers) {
+      const results = [];
+      let currentTime = 0;
+      const serverAvailability = Array(numServers).fill(0);
+      
+      for (let i = 0; i < interArrivalTimes.length; i++) {
+        const arrivalTime = currentTime + interArrivalTimes[i];
+        const serverIndex = serverAvailability.indexOf(Math.min(...serverAvailability));
+        const startTime = Math.max(arrivalTime, serverAvailability[serverIndex]);
+        const endTime = startTime + serviceTimes[i];
+        const waitingTime = startTime - arrivalTime;
+        const completionTime = endTime;
+        
+        serverAvailability[serverIndex] = endTime;
+        currentTime = arrivalTime;
+        
+        results.push({
+          priority: i + 1,
+          startTime,
+          endTime,
+          waitingTime,
+          completionTime
+        });
+      }
+      return results;
+    }
+
+    function drawGanttChart(results) {
+      const canvas = document.getElementById('ganttChart');
+      const ctx = canvas.getContext('2d');
+      
+      const barHeight = 20;
+      const barSpacing = 10;
+      const chartHeight = results.length * (barHeight + barSpacing);
+      canvas.height = chartHeight;
+      
+      results.forEach((result, index) => {
+        const barWidth = result.endTime - result.startTime;
+        ctx.fillStyle = `hsl(${index * 36}, 70%, 50%)`;
+        ctx.fillRect(result.startTime * 10, index * (barHeight + barSpacing), barWidth * 10, barHeight);
+        ctx.fillStyle = 'black';
+        ctx.fillText(`P${result.priority}`, result.startTime * 10, index * (barHeight + barSpacing) + 15);
+      });
+    }
+
+    function populateResultsTable(results) {
+      const tableBody = document.getElementById('resultsTable').querySelector('tbody');
+      tableBody.innerHTML = '';
+      
+      results.forEach(result => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${result.priority}</td>
+          <td>${result.startTime.toFixed(2)}</td>
+          <td>${result.endTime.toFixed(2)}</td>
+          <td>${result.waitingTime.toFixed(2)}</td>
+          <td>${result.completionTime.toFixed(2)}</td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }
+  </script>
+</body>
+</html>
